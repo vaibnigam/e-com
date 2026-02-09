@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: ecom-application
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ecomdb?options=-c%20TimeZone=Asia/Kolkata
+    username: embarkx
+    password: embarkx
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    show-sql: true
+    hibernate:
+      ddl-auto: update
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+
+  endpoint:
+    health:
+      show-details: always
+
+info:
+  app:
+    name: Ecom Application
+    description: Backend Spring Boot App with PostgreSQL
+    version: 1.0.0

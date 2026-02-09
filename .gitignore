@@ -1,0 +1,16 @@
+# IntelliJ IDEA files
+.idea/
+*.iml
+
+# Maven build output
+target/
+
+# Gradle build output
+build/
+
+# Logs
+*.log
+
+# OS junk
+Thumbs.db
+.DS_Store
