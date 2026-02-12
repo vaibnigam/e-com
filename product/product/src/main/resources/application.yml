@@ -8,11 +8,11 @@ spring:
     password: embarkx
 
   jpa:
+    open-in-view: false
     database: POSTGRESQL
     show-sql: true
     hibernate:
       ddl-auto: update
-    database-platform: org.hibernate.dialect.PostgreSQLDialect
 
 #  h2:
 #    console:
