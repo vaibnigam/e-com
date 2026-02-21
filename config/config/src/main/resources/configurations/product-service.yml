@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: product-service
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/product
+    username: embarkx
+    password: embarkx
+
+  jpa:
+    open-in-view: false
+    database: POSTGRESQL
+    show-sql: true
+    hibernate:
+      ddl-auto: update
+
+server:
+  port: 8081

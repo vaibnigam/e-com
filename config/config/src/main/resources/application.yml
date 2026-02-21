@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: config-service
+  
+  cloud:
+    config:
+      server:
+        native:
+          search-locations: classpath:/configurations
+        git:
+          enabled: false
+
+server:
+  port: 8888
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    health:
+      show-details: always
+
+info:
+  app:
+    name: Config Service
+    description: Centralized Configuration Service for E-Commerce Microservices
+    version: 1.0.0

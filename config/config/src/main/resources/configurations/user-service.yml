@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: user-service
+
+  data:
+    mongodb:
+      host: localhost
+      port: 27017
+      database: userdb
+      # Optional: if authentication is needed
+      # username: embarkx
+      # password: embarkx
+      # authentication-database: admin
+
+server:
+  port: 8082
