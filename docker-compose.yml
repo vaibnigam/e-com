@@ -39,6 +39,23 @@ services:
 
     restart: unless-stopped
 
+  mongodb:
+    container_name: mongodb_container
+    image: mongo:7.0
+
+    environment:
+      MONGO_INITDB_DATABASE: userdb
+      TZ: Asia/Kolkata
+
+    ports:
+      - "27017:27017"
+
+    volumes:
+      - mongodb_data:/data/db
+
+    restart: unless-stopped
+
 
 volumes:
   postgres_data:
+  mongodb_data:
