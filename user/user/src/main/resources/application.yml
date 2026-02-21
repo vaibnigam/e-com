@@ -1,16 +1,6 @@
-spring:
-  application:
-    name: user-service
+# Minimal local configuration
+# Most configurations are managed by config-server
+# Only override here if needed for local development or environment-specific settings
 
-  data:
-    mongodb:
-      host: localhost
-      port: 27017
-      database: userdb
-      # Optional: if authentication is needed
-      # username: embarkx
-      # password: embarkx
-      # authentication-database: admin
-
-server:
-  port: 8082
+# Note: Service name and config server connection are in bootstrap.yml
+# MongoDB and server configurations are loaded from config-server

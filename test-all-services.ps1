@@ -1,244 +1,172 @@
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "COMPREHENSIVE MICROSERVICES TEST" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
+# Test all e-commerce microservices including Config Service
+# Prerequisites: PostgreSQL and MongoDB running (docker-compose up -d)
 
-$baseUrl = "http://localhost"
-$productUrl = "${baseUrl}:8081/api/products"
-$userUrl = "${baseUrl}:8082/api/users"
-$orderUrl = "${baseUrl}:8083/api/orders"
-$cartUrl = "${baseUrl}:8083/api/cart"
+$ErrorActionPreference = "Stop"
+$configUrl = "http://localhost:8888"
+$productUrl = "http://localhost:8081"
+$userUrl = "http://localhost:8082"
+$orderUrl = "http://localhost:8083"
 
-$testResults = @()
+$passed = 0
+$failed = 0
 
-# Helper function to test endpoint
+function Wait-ForService {
+    param(
+        [string]$Name,
+        [string]$Url,
+        [int]$MaxAttempts = 30,
+        [int]$DelaySeconds = 2
+    )
+    Write-Host "Waiting for $Name to be ready..." -ForegroundColor Yellow
+    for ($i = 1; $i -le $MaxAttempts; $i++) {
+        try {
+            $response = Invoke-WebRequest -Uri $Url -Method GET -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
+            Write-Host "  [$Name] is ready!" -ForegroundColor Green
+            return $true
+        } catch {
+            if ($i -eq $MaxAttempts) {
+                Write-Host "  [$Name] failed to start after $($MaxAttempts * $DelaySeconds) seconds" -ForegroundColor Red
+                return $false
+            }
+            Start-Sleep -Seconds $DelaySeconds
+        }
+    }
+    return $false
+}
+
 function Test-Endpoint {
     param(
         [string]$Name,
         [string]$Method,
         [string]$Url,
-        [hashtable]$Headers = @{},
         [object]$Body = $null,
-        [int]$ExpectedStatus = 200
+        [hashtable]$Headers = @{}
     )
-    
-    Write-Host "Testing: $Name" -ForegroundColor Yellow
-    Write-Host "  Method: $Method | URL: $Url" -ForegroundColor Gray
-    
     try {
         $params = @{
-            Uri = $Url
             Method = $Method
-            Headers = $Headers
-            TimeoutSec = 5
-            ErrorAction = "Stop"
+            Uri = $Url
+            ContentType = "application/json"
+            UseBasicParsing = $true
         }
-        
-        if ($Body) {
-            $params.Body = ($Body | ConvertTo-Json -Depth 10)
-            $params.ContentType = "application/json"
-        }
-        
-        $response = Invoke-RestMethod @params
-        $statusCode = 200
-        
-        Write-Host "  SUCCESS - Status: $statusCode" -ForegroundColor Green
-        if ($response) {
-            Write-Host "  Response: $($response | ConvertTo-Json -Compress -Depth 3)" -ForegroundColor Gray
-        }
-        
-        return @{ Success = $true; Response = $response; StatusCode = $statusCode }
-    }
-    catch {
-        $statusCode = $_.Exception.Response.StatusCode.value__
-        Write-Host "  FAILED - Status: $statusCode" -ForegroundColor Red
-        Write-Host "  Error: $($_.Exception.Message)" -ForegroundColor Red
-        
-        return @{ Success = $false; Error = $_.Exception.Message; StatusCode = $statusCode }
-    }
-    finally {
-        Write-Host ""
+        if ($Headers.Count -gt 0) { $params.Headers = $Headers }
+        if ($Body) { $params.Body = ($Body | ConvertTo-Json -Depth 5) }
+        $r = Invoke-WebRequest @params
+        Write-Host "  [PASS] $Name" -ForegroundColor Green
+        $script:passed++
+        return $r
+    } catch {
+        Write-Host "  [FAIL] $Name - $($_.Exception.Message)" -ForegroundColor Red
+        $script:failed++
+        return $null
     }
 }
 
-# ============================================
-# 1. PRODUCT SERVICE TESTS
-# ============================================
-Write-Host "========================================" -ForegroundColor Magenta
-Write-Host "1. PRODUCT SERVICE (Port 8081)" -ForegroundColor Magenta
-Write-Host "========================================" -ForegroundColor Magenta
-Write-Host ""
+Write-Host "`n=== Testing All Microservices (Config + Product + User + Order) ===" -ForegroundColor Cyan
+Write-Host "Config: $configUrl | Product: $productUrl | User: $userUrl | Order: $orderUrl`n"
 
-# Get all products
-$result = Test-Endpoint -Name "GET All Products" -Method "GET" -Url $productUrl
-$testResults += $result
+# --- Config Service (8888) ---
+Write-Host "--- Config Service ---" -ForegroundColor Yellow
+if (-not (Wait-ForService -Name "Config Service" -Url "$configUrl/actuator/health")) {
+    Write-Host "Config Service is not running. Please start it first:" -ForegroundColor Red
+    Write-Host "  cd config/config && mvn spring-boot:run" -ForegroundColor Yellow
+    exit 1
+}
+Test-Endpoint -Name "GET /actuator/health" -Method GET -Url "$configUrl/actuator/health"
+Test-Endpoint -Name "GET /product-service/default" -Method GET -Url "$configUrl/product-service/default"
+Test-Endpoint -Name "GET /user-service/default" -Method GET -Url "$configUrl/user-service/default"
+Test-Endpoint -Name "GET /order-service/default" -Method GET -Url "$configUrl/order-service/default"
 
-# Create a test product
-$newProduct = @{
-    name = "Test Laptop"
-    description = "High-performance laptop for testing"
-    price = 999.99
-    stockQuantity = 50
+# --- Product Service (8081) ---
+Write-Host "`n--- Product Service ---" -ForegroundColor Yellow
+if (-not (Wait-ForService -Name "Product Service" -Url "$productUrl/api/products")) {
+    Write-Host "Product Service is not running. Please start it:" -ForegroundColor Red
+    Write-Host "  cd product/product && mvn spring-boot:run" -ForegroundColor Yellow
+    exit 1
+}
+$p1 = Test-Endpoint -Name "GET /api/products" -Method GET -Url "$productUrl/api/products"
+$createProduct = Test-Endpoint -Name "POST /api/products" -Method POST -Url "$productUrl/api/products" -Body @{
+    name = "Test Product"
+    description = "Test description"
+    price = 99.99
+    stockQuantity = 10
     category = "Electronics"
-    imageUrl = "https://example.com/laptop.jpg"
+    imageUrl = ""
 }
-$result = Test-Endpoint -Name "POST Create Product" -Method "POST" -Url $productUrl -Body $newProduct -ExpectedStatus 201
-$testResults += $result
-$createdProduct = $result.Response
+$productId = $null
+if ($createProduct -and $createProduct.Content) {
+    $productId = ($createProduct.Content | ConvertFrom-Json).id
+    Test-Endpoint -Name "GET /api/products/search?keyword=Test" -Method GET -Url "$productUrl/api/products/search?keyword=Test"
+    if ($productId) {
+        Test-Endpoint -Name "PUT /api/products/$productId" -Method PUT -Url "$productUrl/api/products/$productId" -Body @{
+            name = "Test Product Updated"
+            description = "Updated"
+            price = 89.99
+            stockQuantity = 5
+            category = "Electronics"
+            imageUrl = ""
+        }
+    }
+}
 
-# Get products again to verify
-$result = Test-Endpoint -Name "GET All Products (After Create)" -Method "GET" -Url $productUrl
-$testResults += $result
-
-# ============================================
-# 2. USER SERVICE TESTS
-# ============================================
-Write-Host "========================================" -ForegroundColor Magenta
-Write-Host "2. USER SERVICE (Port 8082)" -ForegroundColor Magenta
-Write-Host "========================================" -ForegroundColor Magenta
-Write-Host ""
-
-# Get all users
-$result = Test-Endpoint -Name "GET All Users" -Method "GET" -Url $userUrl
-$testResults += $result
-
-# Create a test user
-$newUser = @{
-    firstName = "John"
-    lastName = "Doe"
-    email = "john.doe@example.com"
+# --- User Service (8082) ---
+Write-Host "`n--- User Service ---" -ForegroundColor Yellow
+if (-not (Wait-ForService -Name "User Service" -Url "$userUrl/api/users")) {
+    Write-Host "User Service is not running. Please start it:" -ForegroundColor Red
+    Write-Host "  cd user/user && mvn spring-boot:run" -ForegroundColor Yellow
+    exit 1
+}
+Test-Endpoint -Name "GET /api/users" -Method GET -Url "$userUrl/api/users"
+$createUser = Test-Endpoint -Name "POST /api/users" -Method POST -Url "$userUrl/api/users" -Body @{
+    firstName = "Test"
+    lastName = "User"
+    email = "testuser@example.com"
     phone = "1234567890"
     address = @{
-        street = "123 Main Street"
-        city = "New York"
-        state = "NY"
-        country = "USA"
-        zipcode = "10001"
+        street = "123 Main St"
+        city = "City"
+        state = "State"
+        country = "Country"
+        zipcode = "12345"
     }
 }
-$result = Test-Endpoint -Name "POST Create User" -Method "POST" -Url $userUrl -Body $newUser -ExpectedStatus 200
-$testResults += $result
-$createdUser = $result.Response
-
-# Get users again to verify
-$result = Test-Endpoint -Name "GET All Users (After Create)" -Method "GET" -Url $userUrl
-$testResults += $result
-$users = $result.Response
-
-# Get user ID for cart tests
-$userId = $null
-if ($users -and $users.Count -gt 0) {
-    $userId = $users[0].id
-    Write-Host "Found User ID: $userId" -ForegroundColor Green
-    Write-Host ""
-} else {
-    Write-Host "WARNING: No user found. Cart tests may fail." -ForegroundColor Yellow
-    Write-Host ""
-    $userId = "1" # Fallback
+$userId = "1"
+Test-Endpoint -Name "GET /api/users/1" -Method GET -Url "$userUrl/api/users/1"
+Test-Endpoint -Name "PUT /api/users/1" -Method PUT -Url "$userUrl/api/users/1" -Body @{
+    firstName = "TestUpdated"
+    lastName = "User"
+    email = "testuser@example.com"
+    phone = "1234567890"
+    address = @{
+        street = "123 Main St"
+        city = "City"
+        state = "State"
+        country = "Country"
+        zipcode = "12345"
+    }
 }
 
-# ============================================
-# 3. CART SERVICE TESTS
-# ============================================
-Write-Host "========================================" -ForegroundColor Magenta
-Write-Host "3. CART SERVICE (Port 8083)" -ForegroundColor Magenta
-Write-Host "========================================" -ForegroundColor Magenta
-Write-Host ""
-
-$cartHeaders = @{
-    "X-User-ID" = $userId
-    "Content-Type" = "application/json"
+# --- Order Service (8083) - Cart & Order ---
+Write-Host "`n--- Order Service (Cart) ---" -ForegroundColor Yellow
+if (-not (Wait-ForService -Name "Order Service" -Url "$orderUrl/api/cart")) {
+    Write-Host "Order Service is not running. Please start it:" -ForegroundColor Red
+    Write-Host "  cd order/order && mvn spring-boot:run" -ForegroundColor Yellow
+    exit 1
+}
+$cartHeaders = @{ "X-User-ID" = $userId }
+if ($productId) {
+    Test-Endpoint -Name "POST /api/cart" -Method POST -Url "$orderUrl/api/cart" -Headers $cartHeaders -Body @{
+        productId = "$productId"
+        quantity = 2
+    }
+}
+Test-Endpoint -Name "GET /api/cart" -Method GET -Url "$orderUrl/api/cart" -Headers $cartHeaders
+Test-Endpoint -Name "POST /api/orders" -Method POST -Url "$orderUrl/api/orders" -Headers $cartHeaders
+if ($productId) {
+    Test-Endpoint -Name "DELETE /api/cart/items/$productId" -Method DELETE -Url "$orderUrl/api/cart/items/$productId" -Headers $cartHeaders
 }
 
-# Get cart (should be empty initially)
-$result = Test-Endpoint -Name "GET Cart (Empty)" -Method "GET" -Url $cartUrl -Headers $cartHeaders
-$testResults += $result
-
-# Add product to cart
-$cartItem = @{
-    productId = "1"
-    quantity = 2
-}
-$result = Test-Endpoint -Name "POST Add Product to Cart" -Method "POST" -Url $cartUrl -Headers $cartHeaders -Body $cartItem -ExpectedStatus 201
-$testResults += $result
-
-# Get cart again to verify item was added
-$result = Test-Endpoint -Name "GET Cart (With Items)" -Method "GET" -Url $cartUrl -Headers $cartHeaders
-$testResults += $result
-
-# Add another product to cart
-$cartItem2 = @{
-    productId = "1"
-    quantity = 1
-}
-$result = Test-Endpoint -Name "POST Add Same Product Again (Update Quantity)" -Method "POST" -Url $cartUrl -Headers $cartHeaders -Body $cartItem2 -ExpectedStatus 201
-$testResults += $result
-
-# Get cart to see updated quantity
-$result = Test-Endpoint -Name "GET Cart (Updated Quantity)" -Method "GET" -Url $cartUrl -Headers $cartHeaders
-$testResults += $result
-
-# Remove item from cart
-$result = Test-Endpoint -Name "DELETE Remove Item from Cart" -Method "DELETE" -Url "$cartUrl/items/1" -Headers $cartHeaders -ExpectedStatus 204
-$testResults += $result
-
-# Get cart to verify item was removed
-$result = Test-Endpoint -Name "GET Cart (After Removal)" -Method "GET" -Url $cartUrl -Headers $cartHeaders
-$testResults += $result
-
-# ============================================
-# 4. ORDER SERVICE TESTS
-# ============================================
-Write-Host "========================================" -ForegroundColor Magenta
-Write-Host "4. ORDER SERVICE (Port 8083)" -ForegroundColor Magenta
-Write-Host "========================================" -ForegroundColor Magenta
-Write-Host ""
-
-$orderHeaders = @{
-    "X-User-ID" = $userId
-    "Content-Type" = "application/json"
-}
-
-# Create an order (requires items in cart)
-# First, add items back to cart
-$cartItem = @{
-    productId = "1"
-    quantity = 1
-}
-$result = Test-Endpoint -Name "POST Add Product to Cart (For Order)" -Method "POST" -Url $cartUrl -Headers $cartHeaders -Body $cartItem -ExpectedStatus 201
-$testResults += $result
-
-# Create order
-$result = Test-Endpoint -Name "POST Create Order" -Method "POST" -Url $orderUrl -Headers $orderHeaders -ExpectedStatus 201
-$testResults += $result
-
-# ============================================
-# TEST SUMMARY
-# ============================================
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "TEST SUMMARY" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
-
-$totalTests = $testResults.Count
-$passedTests = ($testResults | Where-Object { $_.Success -eq $true }).Count
-$failedTests = $totalTests - $passedTests
-
-Write-Host "Total Tests: $totalTests" -ForegroundColor White
-Write-Host "Passed: $passedTests" -ForegroundColor Green
-Write-Host "Failed: $failedTests" -ForegroundColor $(if ($failedTests -eq 0) { "Green" } else { "Red" })
-Write-Host ""
-
-if ($failedTests -eq 0) {
-    Write-Host "All tests passed successfully!" -ForegroundColor Green
-} else {
-    Write-Host "Some tests failed. Check the output above for details." -ForegroundColor Yellow
-}
-
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Test Complete" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
+# --- Summary ---
+Write-Host "`n=== Summary ===" -ForegroundColor Cyan
+Write-Host "Passed: $passed | Failed: $failed"
+if ($failed -gt 0) { exit 1 }

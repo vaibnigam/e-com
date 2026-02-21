@@ -5,6 +5,7 @@ E-Commerce Backend Application built with Spring Boot, PostgreSQL, Docker, JPA/H
 
 | Service        | Port | Database | Base path   |
 |----------------|------|----------|-------------|
+| config-service | 8888 | N/A      | Centralized configuration service |
 | product-service| 8081 | product  | /api/products |
 | user-service   | 8082 | userdb   | /api/users  |
 | order-service  | 8083 | order    | /api/orders, /api/cart |
@@ -21,14 +22,20 @@ E-Commerce Backend Application built with Spring Boot, PostgreSQL, Docker, JPA/H
    docker-compose up -d
    ```
 
-2. **Start each microservice** (from project root, in separate terminals):
+2. **Start Config Service** (from project root, in a separate terminal):
+   ```bash
+   cd config/config && mvn spring-boot:run
+   ```
+   The config service should be started first as other services can optionally connect to it for centralized configuration.
+
+3. **Start each microservice** (from project root, in separate terminals):
    ```bash
    cd product/product   && mvn spring-boot:run
    cd user/user         && mvn spring-boot:run
    cd order/order       && mvn spring-boot:run
    ```
 
-3. **Run the test script** (PowerShell):
+4. **Run the test script** (PowerShell):
    ```powershell
    .\test-microservices.ps1
    ```
